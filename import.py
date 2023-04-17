@@ -1,13 +1,40 @@
-import pymysql #import pymysql librarie
-from config import config #import config librarie
-import csv #import csv librarie
+import pymysql
+import csv
+import os
 
-cnx = pymysql.connect(**config, charset='utf8') #Connection
-cursor = cnx.cursor() #Execute the queries
+# read database configuration from file
+with open('config.txt') as f:
+    config = dict(line.strip().split('=') for line in f)
 
-imput_file = csv.DictReader(open("file.csv", encoding='utf-8')) #read .CSV and set enconding
+# set directory of CSV file
+directory = './'
 
-for row in imput_file:
-    cursor.execute("""INSERT INTO database.Table (field_01, field_02, field_03, field_04, field_05) \
-                    VALUES (%s, %s, %s, %s, %s)""",(row['field_01'],row['field_02'],row['field_03'],row['field_04'], row['field_05']))
-    cnx.commit()
+# loop through CSV files in directory
+for filename in os.listdir(directory):
+    if filename.endswith('.csv'):
+        filepath = os.path.join(directory, filename)
+        
+        # set table name based on filename
+        tablename = os.path.splitext(filename)[0].replace('.', '_')
+        
+        # read CSV file and get column names
+        with open(filepath, encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            columns = reader.fieldnames
+            
+            # generate insert statement with dynamic column names
+            insert_statement = f"INSERT INTO {config['database']}.{tablename} ({', '.join(columns)}) VALUES "
+            
+            # generate value placeholders for each row
+            value_placeholders = []
+            for row in reader:
+                value_placeholders.append(f"({', '.join(['%s']*len(columns))})")
+            
+            # join all value placeholders
+            insert_statement += ', '.join(value_placeholders)
+            
+            # connect to database and execute insert statement
+            cnx = pymysql.connect(**config, charset='utf8')
+            cursor = cnx.cursor()
+            cursor.execute(insert_statement, [row[column] for row in reader for column in columns])
+            cnx.commit()
